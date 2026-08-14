@@ -495,13 +495,13 @@ pub fn split_pf_to_field_order_limbs<C: CircuitConfig>(
 
     for _ in 0..num_limbs {
         let bits = builder.num2bits_v_circuit(current, C::N::bits());
-        let mut remainder = builder.eval(C::N::zero());
-        let zero = builder.eval(C::N::zero());
+        let mut remainder: Var<C::N> = builder.eval(C::N::zero());
+        let zero: Var<C::N> = builder.eval(C::N::zero());
         let mut quotient_bits = vec![zero; bits.len()];
 
         for index in (0..bits.len()).rev() {
-            let candidate = builder.eval(remainder * C::N::two() + bits[index]);
-            let tagged = builder.eval(candidate + comparison_offset);
+            let candidate: Var<C::N> = builder.eval(remainder * C::N::two() + bits[index]);
+            let tagged: Var<C::N> = builder.eval(candidate + comparison_offset);
             let tagged_bits = builder.num2bits_v_circuit(tagged, 33);
             let quotient_bit = tagged_bits[32];
             remainder = builder.eval(candidate - quotient_bit * base);
