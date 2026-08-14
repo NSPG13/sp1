@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use slop_algebra::{AbstractField, Field};
+use slop_algebra::{AbstractField, Field, PrimeField32};
 use slop_bn254::{OUTER_CHALLENGER_RATE, OUTER_DIGEST_SIZE};
 use slop_challenger::DuplexChallenger;
 use slop_multilinear::Point;
@@ -267,6 +267,8 @@ pub struct MultiField32ChallengerVariable<C: CircuitConfig> {
 
 impl<C: CircuitConfig> MultiField32ChallengerVariable<C> {
     pub fn new(builder: &mut Builder<C>) -> Self {
+        let num_duplex_elms = C::N::bits() / SP1Field::bits();
+        let num_f_elms = (C::N::bits() / SP1Field::bits()).saturating_sub(1);
         MultiField32ChallengerVariable::<C> {
             sponge_state: [
                 builder.eval(C::N::zero()),
@@ -276,33 +278,49 @@ impl<C: CircuitConfig> MultiField32ChallengerVariable<C> {
             input_buffer: vec![],
             output_buffer: vec![],
             output_var_buffer: vec![],
-            num_duplex_elms: C::N::bits() / SP1Field::bits(),
-            num_f_elms: C::N::bits() / SP1Field::bits() / 2,
+            num_duplex_elms,
+            num_f_elms,
         }
     }
 
     pub fn duplexing(&mut self, builder: &mut Builder<C>) {
         assert!(self.input_buffer.len() <= self.num_duplex_elms * OUTER_CHALLENGER_RATE);
 
-        for (i, f_chunk) in self.input_buffer.chunks(self.num_duplex_elms).enumerate() {
-            self.sponge_state[i] = reduce_31(builder, f_chunk);
+        if !self.input_buffer.is_empty() {
+            let input_len = self.input_buffer.len();
+            let packed = self
+                .input_buffer
+                .chunks(self.num_duplex_elms)
+                .map(|chunk| reduce_31(builder, chunk))
+                .collect::<Vec<_>>();
+            for (index, value) in packed.iter().copied().enumerate() {
+                self.sponge_state[index] = value;
+            }
+            for index in packed.len()..OUTER_CHALLENGER_RATE {
+                self.sponge_state[index] = builder.eval(C::N::zero());
+            }
+            self.sponge_state[OUTER_CHALLENGER_RATE] = builder.eval(
+                self.sponge_state[OUTER_CHALLENGER_RATE] + C::N::from_canonical_usize(input_len),
+            );
         }
         self.input_buffer.clear();
 
         builder.push_op(DslIr::CircuitPoseidon2Permute(self.sponge_state));
 
+        self.refill_output_vars();
+    }
+
+    fn refill_output_vars(&mut self) {
         self.output_buffer.clear();
         self.output_var_buffer.clear();
-        for &pf_val in self.sponge_state[0..OUTER_CHALLENGER_RATE].iter() {
-            self.output_var_buffer.push(pf_val);
-        }
+        self.output_var_buffer.extend_from_slice(&self.sponge_state[..OUTER_CHALLENGER_RATE]);
     }
 
     pub fn split_var(&mut self, builder: &mut Builder<C>) {
         assert!(self.output_buffer.is_empty());
         assert!(!self.output_var_buffer.is_empty());
         let pf_val = self.output_var_buffer.pop().expect("output var buffer shouldn't be empty");
-        let f_vals = split_32(builder, pf_val, self.num_f_elms);
+        let f_vals = split_pf_to_field_order_limbs(builder, pf_val, self.num_f_elms);
         for f_val in f_vals {
             self.output_buffer.push(f_val);
         }
@@ -323,11 +341,24 @@ impl<C: CircuitConfig> MultiField32ChallengerVariable<C> {
         builder: &mut Builder<C>,
         value: [Var<C::N>; OUTER_DIGEST_SIZE],
     ) {
-        for val in value {
-            let f_vals: Vec<Felt<SP1Field>> = split_32(builder, val, self.num_f_elms);
-            for f_val in f_vals {
-                self.observe(builder, f_val);
+        self.output_buffer.clear();
+        self.output_var_buffer.clear();
+        if !self.input_buffer.is_empty() {
+            self.duplexing(builder);
+        }
+
+        for chunk in value.chunks(OUTER_CHALLENGER_RATE) {
+            for (index, val) in chunk.iter().copied().enumerate() {
+                self.sponge_state[index] = val;
             }
+            for index in chunk.len()..OUTER_CHALLENGER_RATE {
+                self.sponge_state[index] = builder.eval(C::N::zero());
+            }
+            self.sponge_state[OUTER_CHALLENGER_RATE] = builder.eval(
+                self.sponge_state[OUTER_CHALLENGER_RATE] + C::N::from_canonical_usize(chunk.len()),
+            );
+            builder.push_op(DslIr::CircuitPoseidon2Permute(self.sponge_state));
+            self.refill_output_vars();
         }
     }
 
@@ -452,24 +483,58 @@ pub fn reduce_31<C: CircuitConfig>(builder: &mut Builder<C>, vals: &[Felt<SP1Fie
     result
 }
 
-pub fn split_32<C: CircuitConfig>(
+pub fn split_pf_to_field_order_limbs<C: CircuitConfig>(
     builder: &mut Builder<C>,
     val: Var<C::N>,
-    n: usize,
+    num_limbs: usize,
 ) -> Vec<Felt<SP1Field>> {
-    let bits = builder.num2bits_v_circuit(val, 256);
-    let mut results = Vec::new();
-    for i in 0..n {
-        let result: Felt<SP1Field> = builder.eval(SP1Field::zero());
-        for j in 0..64 {
-            let bit = bits[i * 64 + j];
-            let t = builder.eval(result + SP1Field::from_wrapped_u64(1 << j));
-            let z = builder.select_f(bit, t, result);
-            builder.assign(result, z);
+    let mut current = val;
+    let mut output = Vec::with_capacity(num_limbs);
+    let base = C::N::from_canonical_u32(SP1Field::ORDER_U32);
+    let comparison_offset = C::N::from_canonical_u64((1u64 << 32) - u64::from(SP1Field::ORDER_U32));
+
+    for _ in 0..num_limbs {
+        let bits = builder.num2bits_v_circuit(current, C::N::bits());
+        let mut remainder = builder.eval(C::N::zero());
+        let zero = builder.eval(C::N::zero());
+        let mut quotient_bits = vec![zero; bits.len()];
+
+        for index in (0..bits.len()).rev() {
+            let candidate = builder.eval(remainder * C::N::two() + bits[index]);
+            let tagged = builder.eval(candidate + comparison_offset);
+            let tagged_bits = builder.num2bits_v_circuit(tagged, 33);
+            let quotient_bit = tagged_bits[32];
+            remainder = builder.eval(candidate - quotient_bit * base);
+            quotient_bits[index] = quotient_bit;
         }
-        results.push(result);
+
+        output.push(var_to_sp1_felt(builder, remainder));
+        current = bits_to_var(builder, &quotient_bits);
     }
-    results
+
+    output
+}
+
+fn bits_to_var<C: CircuitConfig>(builder: &mut Builder<C>, bits: &[Var<C::N>]) -> Var<C::N> {
+    let mut result = builder.eval(C::N::zero());
+    let mut power = C::N::one();
+    for bit in bits {
+        result = builder.eval(result + *bit * power);
+        power += power;
+    }
+    result
+}
+
+fn var_to_sp1_felt<C: CircuitConfig>(builder: &mut Builder<C>, value: Var<C::N>) -> Felt<SP1Field> {
+    let bits = builder.num2bits_v_circuit(value, 31);
+    let zero = builder.eval(SP1Field::zero());
+    let mut result = zero;
+    for (index, bit) in bits.iter().copied().enumerate() {
+        let power = builder.eval(SP1Field::from_canonical_u32(1u32 << index));
+        let term = builder.select_f(bit, power, zero);
+        result = builder.eval(result + term);
+    }
+    result
 }
 
 #[cfg(test)]
@@ -483,7 +548,10 @@ pub(crate) mod tests {
         hash::{FieldHasherVariable, BN254_DIGEST_SIZE},
         witness::OuterWitness,
     };
-    use slop_algebra::AbstractField;
+    use slop_algebra::{
+        split_pf_to_field_order_limbs, squeeze_field_order_num_limbs, AbstractField, Field,
+        PrimeField64,
+    };
 
     use slop_bn254::{outer_perm, Bn254Fr, OuterPerm};
     use slop_challenger::{
@@ -509,6 +577,52 @@ pub(crate) mod tests {
     type C = OuterConfig;
     type F = <GC as IopCtx>::F;
     type EF = <GC as IopCtx>::EF;
+
+    #[test]
+    fn advisory_partial_chunk_padding_changes_the_challenge() {
+        let mut short =
+            MultiField32Challenger::<SP1Field, Bn254Fr, OuterPerm, 3, 2>::new(outer_perm())
+                .unwrap();
+        short.observe(F::one());
+        let short_challenge: F = short.sample();
+
+        let mut padded =
+            MultiField32Challenger::<SP1Field, Bn254Fr, OuterPerm, 3, 2>::new(outer_perm())
+                .unwrap();
+        padded.observe(F::one());
+        padded.observe(F::zero());
+        let padded_challenge: F = padded.sample();
+
+        assert_ne!(short_challenge, padded_challenge);
+    }
+
+    #[test]
+    fn advisory_upper_squeeze_bits_change_the_output_limbs() {
+        let limb_count = squeeze_field_order_num_limbs::<Bn254Fr, SP1Field>();
+        let low = Bn254Fr::one();
+        let high = Bn254Fr::two().exp_u64(64) + low;
+        let low_limbs = split_pf_to_field_order_limbs::<Bn254Fr, SP1Field>(low, limb_count);
+        let high_limbs = split_pf_to_field_order_limbs::<Bn254Fr, SP1Field>(high, limb_count);
+
+        assert_ne!(low_limbs, high_limbs);
+    }
+
+    #[test]
+    fn advisory_high_digest_bits_change_the_challenge() {
+        let mut low =
+            MultiField32Challenger::<SP1Field, Bn254Fr, OuterPerm, 3, 2>::new(outer_perm())
+                .unwrap();
+        low.observe(Hash::from([Bn254Fr::one()]));
+        let low_challenge: F = low.sample();
+
+        let mut high =
+            MultiField32Challenger::<SP1Field, Bn254Fr, OuterPerm, 3, 2>::new(outer_perm())
+                .unwrap();
+        high.observe(Hash::from([Bn254Fr::from_canonical_u64(SP1Field::ORDER_U64 + 1)]));
+        let high_challenge: F = high.sample();
+
+        assert_ne!(low_challenge, high_challenge);
+    }
 
     #[tokio::test]
     #[allow(clippy::uninlined_format_args)]
