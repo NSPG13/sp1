@@ -96,7 +96,7 @@ func (circuit *Circuit) Define(api frontend.API) error {
 	}
 
 	// Iterate through the instructions and handle each opcode.
-	for _, cs := range constraints {
+	for instructionIndex, cs := range constraints {
 		switch cs.Opcode {
 		case "ImmV":
 			vars[cs.Args[0][0]] = frontend.Variable(cs.Args[1][0])
@@ -179,7 +179,17 @@ func (circuit *Circuit) Define(api frontend.API) error {
 				felts[cs.Args[i][0]] = out[i]
 			}
 		case "AssertEqV":
-			api.AssertIsEqual(vars[cs.Args[0][0]], vars[cs.Args[1][0]])
+			if os.Getenv("SP1_DIAGNOSTIC_ASSERT_CONTEXT") != "" {
+				assertEqVWithContext(
+					api,
+					vars[cs.Args[0][0]],
+					vars[cs.Args[1][0]],
+					instructionIndex,
+					cs.Args,
+				)
+			} else {
+				api.AssertIsEqual(vars[cs.Args[0][0]], vars[cs.Args[1][0]])
+			}
 		case "AssertEqF":
 			arg1, arg2 := fieldAPI.AssertIsEqualF(felts[cs.Args[0][0]], felts[cs.Args[1][0]])
 			felts[cs.Args[0][0]] = arg1
@@ -253,4 +263,24 @@ func (circuit *Circuit) Define(api frontend.API) error {
 	}
 
 	return nil
+}
+
+func assertEqVWithContext(
+	api frontend.API,
+	left frontend.Variable,
+	right frontend.Variable,
+	instructionIndex int,
+	args [][]string,
+) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			panic(fmt.Sprintf(
+				"AssertEqV instruction %d args=%v: %v",
+				instructionIndex,
+				args,
+				recovered,
+			))
+		}
+	}()
+	api.AssertIsEqual(left, right)
 }

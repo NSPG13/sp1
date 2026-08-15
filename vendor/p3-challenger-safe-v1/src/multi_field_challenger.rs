@@ -2,14 +2,81 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use p3_field::{
-    absorb_radix_bits, max_absorb_injective_limbs, reduce_packed, split_pf_to_field_order_limbs,
-    squeeze_field_order_num_limbs, ExtensionField, PrimeField, PrimeField31, PrimeField32,
-};
+use num_bigint::BigUint;
+use p3_field::{ExtensionField, PrimeField, PrimeField31, PrimeField32};
 use p3_symmetric::{CryptographicPermutation, Hash};
 use serde::{Deserialize, Serialize};
 
 use crate::{CanObserve, CanSample, CanSampleBits, FieldChallenger};
+
+/// Smallest radix width that represents every canonical source-field value.
+#[inline]
+#[must_use]
+pub const fn absorb_radix_bits<F: PrimeField32>() -> u32 {
+    u32::BITS - (F::ORDER_U32 - 1).leading_zeros()
+}
+
+/// Packs canonical source-field limbs without reduction in the target field.
+#[must_use]
+pub fn reduce_packed<SF: PrimeField32, TF: PrimeField>(vals: &[SF], radix_bits: u32) -> TF {
+    debug_assert!(absorb_radix_bits::<SF>() <= radix_bits && radix_bits < 64);
+    let base = TF::from_canonical_u64(1u64 << radix_bits);
+    vals.iter().rev().fold(TF::zero(), |acc, value| {
+        acc * base + TF::from_canonical_u32(value.as_canonical_u32())
+    })
+}
+
+/// Maximum source-field limbs that fit injectively in one target-field word.
+#[must_use]
+pub fn max_absorb_injective_limbs<F: PrimeField32, PF: PrimeField>() -> usize {
+    let radix_bits = absorb_radix_bits::<F>();
+    let max_digit = BigUint::from(F::ORDER_U32 - 1);
+    let base = BigUint::from(1u32) << radix_bits as usize;
+    let target_order = PF::order();
+    let mut limbs = 0usize;
+    let mut max_value = BigUint::from(0u32);
+    let mut power = BigUint::from(1u32);
+    loop {
+        let candidate = &max_value + &max_digit * &power;
+        if candidate >= target_order {
+            return limbs;
+        }
+        max_value = candidate;
+        power *= &base;
+        limbs += 1;
+    }
+}
+
+/// Number of near-uniform base-field-order limbs retained from a target word.
+#[must_use]
+pub fn squeeze_field_order_num_limbs<PF: PrimeField, F: PrimeField32>() -> usize {
+    let base = BigUint::from(F::ORDER_U32);
+    let target_order = PF::order();
+    let mut count = 0usize;
+    let mut power = BigUint::from(1u32);
+    while &power * &base < target_order {
+        power *= &base;
+        count += 1;
+    }
+    count.saturating_sub(1)
+}
+
+/// Splits a target word into little-endian base-`F::ORDER_U32` limbs.
+#[must_use]
+pub fn split_pf_to_field_order_limbs<PF: PrimeField, F: PrimeField32>(
+    value: PF,
+    num_limbs: usize,
+) -> Vec<F> {
+    let base = F::ORDER_U32;
+    let mut remaining = value.as_canonical_biguint();
+    let mut output = Vec::with_capacity(num_limbs);
+    for _ in 0..num_limbs {
+        let limb = (&remaining % base).to_u32_digits().first().copied().unwrap_or(0);
+        output.push(F::from_canonical_u32(limb));
+        remaining /= base;
+    }
+    output
+}
 
 /// A challenger that operates natively on PF but produces challenges of F: PrimeField32.
 ///

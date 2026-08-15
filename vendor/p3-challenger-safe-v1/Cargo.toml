@@ -38,8 +38,11 @@ name = "p3_challenger"
 path = "src/lib.rs"
 
 [dependencies.p3-field]
-path = "../p3-field-safe-v1"
 version = "=0.4.3-succinct"
+
+[dependencies.num-bigint]
+version = "0.4.6"
+default-features = false
 
 [dependencies.p3-maybe-rayon]
 version = "=0.4.3-succinct"

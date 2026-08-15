@@ -466,9 +466,8 @@ dependencies = [
 [[package]]
 name = "p3-challenger"
 version = "0.4.3-succinct"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6a908924d43e4cfb93fb41c8346cac211b70314385a9037e9241f5b7f3eaf77"
 dependencies = [
+ "num-bigint 0.4.6",
  "p3-field",
  "p3-maybe-rayon",
  "p3-symmetric",

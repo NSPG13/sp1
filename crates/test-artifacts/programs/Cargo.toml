@@ -53,6 +53,7 @@ serde_json = "1.0.132"
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 
 [patch.crates-io]
+p3-challenger = { path = "../../../vendor/p3-challenger-safe-v1" }
 sha2-v0-9-8 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", branch = "patch-v0.9.8" }
 ed25519-consensus = { git = "https://github.com/sp1-patches/ed25519-consensus", branch = "patch-v2.1.0" }
 sp1-lib = { path = "../../../crates/zkvm/lib" }

@@ -117,10 +117,10 @@ pub type BNGC<F, EF> = Poseidon2Bn254GlobalConfig<F, EF>;
 #[cfg(test)]
 mod transcript_regression_tests {
     use super::*;
-    use slop_algebra::{
-        split_pf_to_field_order_limbs, squeeze_field_order_num_limbs, AbstractField, PrimeField64,
+    use slop_algebra::{AbstractField, PrimeField64};
+    use slop_challenger::{
+        split_pf_to_field_order_limbs, squeeze_field_order_num_limbs, CanObserve, CanSample,
     };
-    use slop_challenger::{CanObserve, CanSample};
     use slop_koala_bear::KoalaBear;
     use slop_symmetric::Hash;
 

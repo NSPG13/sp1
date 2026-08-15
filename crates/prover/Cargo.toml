@@ -105,6 +105,14 @@ path = "scripts/regenerate_wrap_template.rs"
 required-features = ["tokio/rt-multi-thread"]
 
 [[bin]]
+name = "verify_wrap_template"
+path = "scripts/verify_wrap_template.rs"
+
+[[bin]]
+name = "export_wrap_constraints"
+path = "scripts/export_wrap_constraints.rs"
+
+[[bin]]
 name = "gen_soundcalc_toml"
 path = "scripts/gen_soundcalc_toml.rs"
 

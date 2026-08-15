@@ -349,7 +349,9 @@ impl<C: CircuitConfig> MultiField32ChallengerVariable<C> {
 
         for chunk in value.chunks(OUTER_CHALLENGER_RATE) {
             for (index, val) in chunk.iter().copied().enumerate() {
-                self.sponge_state[index] = val;
+                // Circuit permutations update their operands in place. Copy the commitment into
+                // fresh variables so observing it cannot mutate a digest that is reused later.
+                self.sponge_state[index] = builder.eval(val);
             }
             for index in chunk.len()..OUTER_CHALLENGER_RATE {
                 self.sponge_state[index] = builder.eval(C::N::zero());
@@ -548,15 +550,12 @@ pub(crate) mod tests {
         hash::{FieldHasherVariable, BN254_DIGEST_SIZE},
         witness::OuterWitness,
     };
-    use slop_algebra::{
-        split_pf_to_field_order_limbs, squeeze_field_order_num_limbs, AbstractField, Field,
-        PrimeField64,
-    };
+    use slop_algebra::{AbstractField, PrimeField64};
 
     use slop_bn254::{outer_perm, Bn254Fr, OuterPerm};
     use slop_challenger::{
-        CanObserve, CanSample, CanSampleBits, DuplexChallenger, FieldChallenger, IopCtx,
-        MultiField32Challenger,
+        split_pf_to_field_order_limbs, squeeze_field_order_num_limbs, CanObserve, CanSample,
+        CanSampleBits, DuplexChallenger, FieldChallenger, IopCtx, MultiField32Challenger,
     };
 
     use slop_symmetric::{CryptographicHasher, Hash, PseudoCompressionFunction};
@@ -622,6 +621,18 @@ pub(crate) mod tests {
         let high_challenge: F = high.sample();
 
         assert_ne!(low_challenge, high_challenge);
+    }
+
+    #[test]
+    fn observing_a_commitment_does_not_mutate_the_input_variable() {
+        type N = <C as Config>::N;
+
+        let mut builder = Builder::<C>::default();
+        let commitment: Var<_> = builder.eval(N::from_canonical_u64(123456789));
+        let mut challenger = MultiField32ChallengerVariable::<C>::new(&mut builder);
+
+        challenger.observe_commitment(&mut builder, [commitment]);
+        assert_ne!(challenger.sponge_state[0], commitment);
     }
 
     #[tokio::test]

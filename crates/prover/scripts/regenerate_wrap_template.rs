@@ -1,12 +1,17 @@
-use std::path::PathBuf;
+use std::{borrow::Borrow, path::PathBuf};
 
 use clap::Parser;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use slop_challenger::IopCtx;
 use sp1_core_executor::SP1Context;
 use sp1_core_machine::{io::SP1Stdin, riscv::RiscvAir, utils::setup_logger};
+use sp1_hypercube::HashableKey;
+use sp1_primitives::{SP1Field, SP1OuterGlobalContext};
 use sp1_prover::worker::{cpu_worker_builder_with_machine, SP1LocalNodeBuilder};
+use sp1_prover::{CpuSP1ProverComponents, SP1ProverComponents};
 use sp1_prover_types::network_base_types::ProofMode;
+use sp1_recursion_circuit::machine::RootPublicValues;
 
 /// Rebuilds the wrap verification key and template proof for this exact circuit source.
 #[derive(Parser, Debug)]
@@ -39,6 +44,7 @@ async fn main() {
             .build()
             .await
             .expect("failed to build local prover");
+    let vk = client.setup(&elf).await.expect("failed to derive template guest vkey");
 
     let compressed_proof = client
         .prove_with_mode(&elf, SP1Stdin::new(), SP1Context::default(), ProofMode::Compressed)
@@ -46,6 +52,23 @@ async fn main() {
         .expect("failed to produce compressed template proof");
     let wrapped =
         client.shrink_wrap(&compressed_proof.proof).await.expect("failed to shrink-wrap proof");
+    let mut challenger = SP1OuterGlobalContext::default_challenger();
+    wrapped.vk.observe_into(&mut challenger);
+    CpuSP1ProverComponents::wrap_verifier()
+        .verify_shard(&wrapped.vk, &wrapped.proof, &mut challenger)
+        .expect("generated wrap template proof failed native verification");
+    let public_values: &RootPublicValues<SP1Field> =
+        wrapped.proof.public_values.as_slice().borrow();
+    assert_eq!(
+        *public_values.vk_root(),
+        client.core().recursion_vks().root(),
+        "generated wrap template has a stale recursion-vkey root"
+    );
+    assert_eq!(
+        *public_values.sp1_vk_digest(),
+        vk.hash_koalabear(),
+        "generated wrap template is not bound to the template guest vkey"
+    );
 
     std::fs::create_dir_all(&args.output_dir).expect("failed to create output directory");
     let wrap_vk =

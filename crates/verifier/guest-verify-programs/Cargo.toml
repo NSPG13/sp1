@@ -30,5 +30,6 @@ sp1-verifier = { path = "../", default-features = false }
 blake3 = ["sp1-zkvm/blake3"]
 
 [patch.crates-io]
+p3-challenger = { path = "../../../vendor/p3-challenger-safe-v1" }
 sp1-lib = { path = "../../zkvm/lib" }
 bn = { git = "https://github.com/sp1-patches/bn", tag = "patch-0.6.0-sp1-6.2.0", package = "substrate-bn-succinct-rs" }
