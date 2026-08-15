@@ -1,0 +1,7 @@
+{
+  "circuit_version": "agent-bounties-sp1-safe-v2",
+  "schema": "agent-bounties/sp1-wrap-template-v1",
+  "template_elf_sha256": "203b08b0c06e7ad8307eeffc27453276ab6ffa8659ff2e020ae7fb2ef07d7253",
+  "wrap_vk_sha256": "fce924068aa5a610ee676d210b5ac5ca8b1ec305f5ffe4524fc9dc990d2dfb78",
+  "wrapped_proof_sha256": "5d3453d07683aa7d71d372442fbd378566491fb8e66bafa75d9c0e3820466024"
+}
