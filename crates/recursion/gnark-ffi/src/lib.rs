@@ -16,4 +16,16 @@ pub use witness::*;
 /// This string should be updated whenever any step in verifying an SP1 proof changes, including
 /// core, recursion, and plonk-bn254. This string is used to download SP1 artifacts and the gnark
 /// docker image.
-const SP1_CIRCUIT_VERSION: &str = include_str!("../assets/SP1_CIRCUIT_VERSION");
+const SP1_CIRCUIT_VERSION: &str = "agent-bounties-sp1-safe-v2";
+
+#[cfg(test)]
+mod tests {
+    use super::SP1_CIRCUIT_VERSION;
+
+    #[test]
+    fn circuit_version_matches_release_file_and_is_a_valid_tag() {
+        let release_file = include_str!("../assets/SP1_CIRCUIT_VERSION");
+        assert_eq!(release_file.trim(), SP1_CIRCUIT_VERSION);
+        assert!(!SP1_CIRCUIT_VERSION.chars().any(char::is_whitespace));
+    }
+}

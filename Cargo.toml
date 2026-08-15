@@ -169,10 +169,10 @@ sp1-gpu-zerocheck = { version = "6.4.0", path = "sp1-gpu/crates/zerocheck" }
 p3-air = "=0.4.3-succinct"
 p3-baby-bear = "=0.4.3-succinct"
 p3-bn254-fr = "=0.4.3-succinct"
-p3-challenger = "=0.4.3-succinct"
+p3-challenger = { path = "vendor/p3-challenger-safe-v1" }
 p3-commit = "=0.4.3-succinct"
 p3-dft = "=0.4.3-succinct"
-p3-field = "=0.4.3-succinct"
+p3-field = { path = "vendor/p3-field-safe-v1" }
 p3-fri = "=0.4.3-succinct"
 p3-keccak-air = "=0.4.3-succinct"
 p3-koala-bear = "=0.4.3-succinct"
@@ -348,6 +348,13 @@ pathdiff = "0.2.1"
 dotenv = "0.15.0"
 cc = { version = "1.0", features = ["parallel"] }
 which = "6.0"
+
+[patch.crates-io]
+# Beta2 uses a source-pinned transcript hardening backport. Keeping these
+# package versions preserves the 0.4.3-succinct type graph while replacing
+# the vulnerable registry source in every transitive dependency.
+p3-challenger = { path = "vendor/p3-challenger-safe-v1" }
+p3-field = { path = "vendor/p3-field-safe-v1" }
 
 [workspace.metadata.typos]
 default.extend-ignore-re = [

@@ -4680,8 +4680,6 @@ dependencies = [
 [[package]]
 name = "p3-challenger"
 version = "0.4.3-succinct"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6a908924d43e4cfb93fb41c8346cac211b70314385a9037e9241f5b7f3eaf77"
 dependencies = [
  "p3-field",
  "p3-maybe-rayon",
@@ -4721,8 +4719,6 @@ dependencies = [
 [[package]]
 name = "p3-field"
 version = "0.4.3-succinct"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dc75969ca3ac847f43e632ab979d59ff7a68f9eac8dbf8edcbba47fc2e1d3aa"
 dependencies = [
  "itertools 0.12.1",
  "num-bigint 0.4.6",
@@ -6579,6 +6575,7 @@ dependencies = [
  "serde",
  "slop-algebra 6.4.0",
  "slop-challenger 6.4.0",
+ "slop-koala-bear 6.4.0",
  "slop-poseidon2 6.4.0",
  "slop-symmetric 6.4.0",
 ]

@@ -100,6 +100,11 @@ name = "build_plonk_bn254"
 path = "scripts/build_plonk_bn254.rs"
 
 [[bin]]
+name = "regenerate_wrap_template"
+path = "scripts/regenerate_wrap_template.rs"
+required-features = ["tokio/rt-multi-thread"]
+
+[[bin]]
 name = "gen_soundcalc_toml"
 path = "scripts/gen_soundcalc_toml.rs"
 

@@ -113,3 +113,54 @@ impl<F: PrimeField31, EF: ExtensionField<F>> IopCtx for Poseidon2Bn254GlobalConf
 }
 
 pub type BNGC<F, EF> = Poseidon2Bn254GlobalConfig<F, EF>;
+
+#[cfg(test)]
+mod transcript_regression_tests {
+    use super::*;
+    use slop_algebra::{
+        split_pf_to_field_order_limbs, squeeze_field_order_num_limbs, AbstractField, PrimeField64,
+    };
+    use slop_challenger::{CanObserve, CanSample};
+    use slop_koala_bear::KoalaBear;
+    use slop_symmetric::Hash;
+
+    type Challenger = MultiField32Challenger<KoalaBear, Bn254Fr, OuterPerm, 3, 2>;
+
+    #[test]
+    fn partial_chunk_padding_changes_the_challenge() {
+        let mut short = Challenger::new(outer_perm()).unwrap();
+        short.observe(KoalaBear::one());
+        let short_challenge: KoalaBear = short.sample();
+
+        let mut padded = Challenger::new(outer_perm()).unwrap();
+        padded.observe(KoalaBear::one());
+        padded.observe(KoalaBear::zero());
+        let padded_challenge: KoalaBear = padded.sample();
+
+        assert_ne!(short_challenge, padded_challenge);
+    }
+
+    #[test]
+    fn upper_squeeze_bits_change_the_output_limbs() {
+        let limb_count = squeeze_field_order_num_limbs::<Bn254Fr, KoalaBear>();
+        let low = Bn254Fr::one();
+        let high = Bn254Fr::two().exp_u64(64) + low;
+        assert_ne!(
+            split_pf_to_field_order_limbs::<Bn254Fr, KoalaBear>(low, limb_count),
+            split_pf_to_field_order_limbs::<Bn254Fr, KoalaBear>(high, limb_count)
+        );
+    }
+
+    #[test]
+    fn high_digest_bits_change_the_challenge() {
+        let mut low = Challenger::new(outer_perm()).unwrap();
+        low.observe(Hash::from([Bn254Fr::one()]));
+        let low_challenge: KoalaBear = low.sample();
+
+        let mut high = Challenger::new(outer_perm()).unwrap();
+        high.observe(Hash::from([Bn254Fr::from_canonical_u64(KoalaBear::ORDER_U64 + 1)]));
+        let high_challenge: KoalaBear = high.sample();
+
+        assert_ne!(low_challenge, high_challenge);
+    }
+}
