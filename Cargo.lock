@@ -4679,7 +4679,7 @@ dependencies = [
 
 [[package]]
 name = "p3-challenger"
-version = "0.4.3-succinct"
+version = "0.4.3+agentbounties.safe.1"
 dependencies = [
  "p3-field",
  "p3-maybe-rayon",

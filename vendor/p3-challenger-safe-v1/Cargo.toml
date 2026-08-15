@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "p3-challenger"
-version = "0.4.3-succinct"
+version = "0.4.3+agentbounties.safe.1"
 build = false
 autolib = false
 autobins = false
