@@ -268,7 +268,9 @@ pub struct MultiField32ChallengerVariable<C: CircuitConfig> {
 impl<C: CircuitConfig> MultiField32ChallengerVariable<C> {
     pub fn new(builder: &mut Builder<C>) -> Self {
         let num_duplex_elms = C::N::bits() / SP1Field::bits();
-        let num_f_elms = (C::N::bits() / SP1Field::bits()).saturating_sub(1);
+        let squeeze_limb_bits =
+            (u32::BITS - 1 - (SP1Field::ORDER_U32 - 1).leading_zeros()) as usize;
+        let num_f_elms = C::N::bits().div_ceil(squeeze_limb_bits);
         MultiField32ChallengerVariable::<C> {
             sponge_state: [
                 builder.eval(C::N::zero()),
@@ -490,45 +492,20 @@ pub fn split_pf_to_field_order_limbs<C: CircuitConfig>(
     val: Var<C::N>,
     num_limbs: usize,
 ) -> Vec<Felt<SP1Field>> {
-    let mut current = val;
+    let limb_bits = (u32::BITS - 1 - (SP1Field::ORDER_U32 - 1).leading_zeros()) as usize;
+    let bits = builder.num2bits_v_circuit(val, C::N::bits());
     let mut output = Vec::with_capacity(num_limbs);
-    let base = C::N::from_canonical_u32(SP1Field::ORDER_U32);
-    let comparison_offset = C::N::from_canonical_u64((1u64 << 32) - u64::from(SP1Field::ORDER_U32));
-
-    for _ in 0..num_limbs {
-        let bits = builder.num2bits_v_circuit(current, C::N::bits());
-        let mut remainder: Var<C::N> = builder.eval(C::N::zero());
-        let zero: Var<C::N> = builder.eval(C::N::zero());
-        let mut quotient_bits = vec![zero; bits.len()];
-
-        for index in (0..bits.len()).rev() {
-            let candidate: Var<C::N> = builder.eval(remainder * C::N::two() + bits[index]);
-            let tagged: Var<C::N> = builder.eval(candidate + comparison_offset);
-            let tagged_bits = builder.num2bits_v_circuit(tagged, 33);
-            let quotient_bit = tagged_bits[32];
-            remainder = builder.eval(candidate - quotient_bit * base);
-            quotient_bits[index] = quotient_bit;
-        }
-
-        output.push(var_to_sp1_felt(builder, remainder));
-        current = bits_to_var(builder, &quotient_bits);
+    for chunk in bits.chunks(limb_bits) {
+        output.push(bits_to_sp1_felt(builder, chunk));
     }
-
+    assert_eq!(output.len(), num_limbs);
     output
 }
 
-fn bits_to_var<C: CircuitConfig>(builder: &mut Builder<C>, bits: &[Var<C::N>]) -> Var<C::N> {
-    let mut result = builder.eval(C::N::zero());
-    let mut power = C::N::one();
-    for bit in bits {
-        result = builder.eval(result + *bit * power);
-        power += power;
-    }
-    result
-}
-
-fn var_to_sp1_felt<C: CircuitConfig>(builder: &mut Builder<C>, value: Var<C::N>) -> Felt<SP1Field> {
-    let bits = builder.num2bits_v_circuit(value, 31);
+fn bits_to_sp1_felt<C: CircuitConfig>(
+    builder: &mut Builder<C>,
+    bits: &[Var<C::N>],
+) -> Felt<SP1Field> {
     let zero = builder.eval(SP1Field::zero());
     let mut result = zero;
     for (index, bit) in bits.iter().copied().enumerate() {
@@ -599,7 +576,7 @@ pub(crate) mod tests {
     fn advisory_upper_squeeze_bits_change_the_output_limbs() {
         let limb_count = squeeze_field_order_num_limbs::<Bn254Fr, SP1Field>();
         let low = Bn254Fr::one();
-        let high = Bn254Fr::two().exp_u64(64) + low;
+        let high = Bn254Fr::two().exp_u64(240) + low;
         let low_limbs = split_pf_to_field_order_limbs::<Bn254Fr, SP1Field>(low, limb_count);
         let high_limbs = split_pf_to_field_order_limbs::<Bn254Fr, SP1Field>(high, limb_count);
 

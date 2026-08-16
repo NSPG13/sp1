@@ -144,7 +144,7 @@ mod transcript_regression_tests {
     fn upper_squeeze_bits_change_the_output_limbs() {
         let limb_count = squeeze_field_order_num_limbs::<Bn254Fr, KoalaBear>();
         let low = Bn254Fr::one();
-        let high = Bn254Fr::two().exp_u64(64) + low;
+        let high = Bn254Fr::two().exp_u64(240) + low;
         assert_ne!(
             split_pf_to_field_order_limbs::<Bn254Fr, KoalaBear>(low, limb_count),
             split_pf_to_field_order_limbs::<Bn254Fr, KoalaBear>(high, limb_count)

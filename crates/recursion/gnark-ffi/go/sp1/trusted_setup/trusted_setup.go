@@ -1,6 +1,7 @@
 package trusted_setup
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -13,6 +14,29 @@ import (
 	"github.com/consensys/gnark-ignition-verifier/ignition"
 	"github.com/consensys/gnark/constraint"
 )
+
+func requiredDomainSize(sizeSystem int) (int, error) {
+	if sizeSystem <= 0 {
+		return 0, fmt.Errorf("constraint system size must be positive, got %d", sizeSystem)
+	}
+
+	domainSize := 1
+	if sizeSystem > 1 {
+		domainSize = 1 << stdbits.Len(uint(sizeSystem-1))
+	}
+	return domainSize, nil
+}
+
+func requireSrsCapacity(available, required int) error {
+	if available < required {
+		return fmt.Errorf(
+			"trusted setup capacity %d is below required evaluation domain %d",
+			available,
+			required,
+		)
+	}
+	return nil
+}
 
 func sanityCheck(srs *kzg_bn254.SRS) {
 	// we can now use the SRS to verify a proof
@@ -155,7 +179,13 @@ func ToLagrange(scs constraint.ConstraintSystem, canonicalSRS kzg.SRS) kzg.SRS {
 	case *kzg_bn254.SRS:
 		var err error
 		sizeSystem := scs.GetNbPublicVariables() + scs.GetNbConstraints()
-		nextPowerTwo := 1 << stdbits.Len(uint(sizeSystem))
+		nextPowerTwo, err := requiredDomainSize(sizeSystem)
+		if err != nil {
+			panic(err)
+		}
+		if err := requireSrsCapacity(len(srs.Pk.G1), nextPowerTwo); err != nil {
+			panic(fmt.Errorf("PLONK setup rejected for %d constraints and public variables: %w", sizeSystem, err))
+		}
 		newSRS := &kzg_bn254.SRS{Vk: srs.Vk}
 		newSRS.Pk.G1, err = kzg_bn254.ToLagrangeG1(srs.Pk.G1[:nextPowerTwo])
 		if err != nil {

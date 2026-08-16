@@ -47,34 +47,36 @@ pub fn max_absorb_injective_limbs<F: PrimeField32, PF: PrimeField>() -> usize {
     }
 }
 
-/// Number of near-uniform base-field-order limbs retained from a target word.
+/// Bit width for an injective target-word digit in the source field.
+#[inline]
 #[must_use]
-pub fn squeeze_field_order_num_limbs<PF: PrimeField, F: PrimeField32>() -> usize {
-    let base = BigUint::from(F::ORDER_U32);
-    let target_order = PF::order();
-    let mut count = 0usize;
-    let mut power = BigUint::from(1u32);
-    while &power * &base < target_order {
-        power *= &base;
-        count += 1;
-    }
-    count.saturating_sub(1)
+pub const fn squeeze_limb_bits<F: PrimeField32>() -> u32 {
+    u32::BITS - 1 - (F::ORDER_U32 - 1).leading_zeros()
 }
 
-/// Splits a target word into little-endian base-`F::ORDER_U32` limbs.
+/// Number of fixed-width source-field limbs required to retain a target word.
+#[must_use]
+pub fn squeeze_field_order_num_limbs<PF: PrimeField, F: PrimeField32>() -> usize {
+    let limb_bits = squeeze_limb_bits::<F>() as usize;
+    (PF::order().bits() as usize).div_ceil(limb_bits)
+}
+
+/// Splits a target word into little-endian fixed-width limbs without reduction.
 #[must_use]
 pub fn split_pf_to_field_order_limbs<PF: PrimeField, F: PrimeField32>(
     value: PF,
     num_limbs: usize,
 ) -> Vec<F> {
-    let base = F::ORDER_U32;
+    let limb_bits = squeeze_limb_bits::<F>() as usize;
+    let mask = (BigUint::from(1u32) << limb_bits) - BigUint::from(1u32);
     let mut remaining = value.as_canonical_biguint();
     let mut output = Vec::with_capacity(num_limbs);
     for _ in 0..num_limbs {
-        let limb = (&remaining % base).to_u32_digits().first().copied().unwrap_or(0);
+        let limb = (&remaining & &mask).to_u32_digits().first().copied().unwrap_or(0);
         output.push(F::from_canonical_u32(limb));
-        remaining /= base;
+        remaining >>= limb_bits;
     }
+    debug_assert_eq!(remaining, BigUint::from(0u32));
     output
 }
 
@@ -84,7 +86,7 @@ pub fn split_pf_to_field_order_limbs<PF: PrimeField, F: PrimeField32>(
 ///
 /// Scalar absorbs are injectively packed, exact-length tagged, and zero padded.
 /// Native digest words are absorbed without lossy field conversion. Squeezed
-/// values use base-field-order limbs over the complete `F` domain.
+/// values use fixed-width injective limbs over the complete target-field domain.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound(serialize = "[PF; WIDTH]: Serialize, P: Serialize"))]
 #[serde(bound(deserialize = "[PF; WIDTH]: Deserialize<'de>, P: Deserialize<'de>"))]
