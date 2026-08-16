@@ -1,7 +1,7 @@
 {
-  "circuit_version": "agent-bounties-sp1-safe-v4",
+  "circuit_version": "agent-bounties-sp1-safe-v5",
   "schema": "agent-bounties/sp1-wrap-template-v1",
-  "template_elf_sha256": "baba25c15475e3164e4e13d6d2cb56b80fdafaf2f1438f40020f7e2a1c722abd",
+  "template_elf_sha256": "f1fbe6c3f4053dd93791efeb667264f927b8717cfec71a2b3b9e18ae6e5e4091",
   "wrap_vk_sha256": "fce924068aa5a610ee676d210b5ac5ca8b1ec305f5ffe4524fc9dc990d2dfb78",
-  "wrapped_proof_sha256": "728eeb3aa049805dd16fe95f13ff83b5d35ede50ebddcd2d9a173165bb1cd892"
+  "wrapped_proof_sha256": "44f1149703a568c5ce789da75c4d22f84e7269ef5d813d33b3ad0e9382999c31"
 }
