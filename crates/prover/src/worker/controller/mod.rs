@@ -46,6 +46,14 @@ use crate::{
     SP1_CIRCUIT_VERSION,
 };
 
+fn require_successful_wrap(task: &str, status: TaskStatus) -> Result<(), TaskError> {
+    if status == TaskStatus::Succeeded {
+        Ok(())
+    } else {
+        Err(TaskError::Fatal(anyhow::anyhow!("{task} task failed with status {status:?}")))
+    }
+}
+
 #[derive(Clone)]
 pub struct MinimalExecutorCache(Arc<Mutex<Option<MinimalExecutorRunner>>>);
 
@@ -417,11 +425,13 @@ where
 
                     let shrinkwrap_task_id =
                         worker_client.submit_task(TaskType::ShrinkWrap, shrinkwrap_task).await?;
-                    subscriber.wait_task(shrinkwrap_task_id).await?;
+                    let status = subscriber.wait_task(shrinkwrap_task_id).await?;
+                    require_successful_wrap("ShrinkWrap", status)?;
 
                     let groth16_task_id =
                         worker_client.submit_task(TaskType::Groth16Wrap, groth16_task).await?;
-                    subscriber.wait_task(groth16_task_id).await?;
+                    let status = subscriber.wait_task(groth16_task_id).await?;
+                    require_successful_wrap("Groth16Wrap", status)?;
                     Ok(())
                 });
             }
@@ -448,11 +458,13 @@ where
 
                     let shrinkwrap_task_id =
                         worker_client.submit_task(TaskType::ShrinkWrap, shrinkwrap_task).await?;
-                    subscriber.wait_task(shrinkwrap_task_id).await?;
+                    let status = subscriber.wait_task(shrinkwrap_task_id).await?;
+                    require_successful_wrap("ShrinkWrap", status)?;
 
                     let plonk_task_id =
                         worker_client.submit_task(TaskType::PlonkWrap, plonk_task).await?;
-                    subscriber.wait_task(plonk_task_id).await?;
+                    let status = subscriber.wait_task(plonk_task_id).await?;
+                    require_successful_wrap("PlonkWrap", status)?;
                     Ok(())
                 });
             }
@@ -728,6 +740,14 @@ impl ControllerInputMetadata {
 mod tests {
     use super::*;
     use sp1_prover_types::InMemoryArtifactClient;
+
+    #[test]
+    fn wrap_status_must_be_successful() {
+        assert!(require_successful_wrap("Groth16Wrap", TaskStatus::Succeeded).is_ok());
+        let error = require_successful_wrap("Groth16Wrap", TaskStatus::FailedFatal)
+            .expect_err("a failed wrap must stop the controller");
+        assert!(error.to_string().contains("Groth16Wrap task failed"));
+    }
 
     #[tokio::test]
     async fn a_first_delivery_executes() {

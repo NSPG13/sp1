@@ -16,7 +16,7 @@ pub use components::*;
 /// This string should be updated whenever any step in verifying an SP1 proof changes, including
 /// core, recursion, and plonk-bn254. This string is used to download SP1 artifacts and the gnark
 /// docker image.
-pub const SP1_CIRCUIT_VERSION: &str = "agent-bounties-sp1-safe-v4";
+pub const SP1_CIRCUIT_VERSION: &str = "agent-bounties-sp1-safe-v5";
 
 #[cfg(test)]
 mod tests {
