@@ -440,7 +440,9 @@ impl ArtifactClient for InMemoryArtifactClient {
         _artifact_type: ArtifactType,
     ) -> Result<Vec<u8>> {
         let artifacts = self.artifacts.read().await;
-        let bytes = artifacts.get(artifact.id()).ok_or_else(|| anyhow!("artifact not found"))?;
+        let bytes = artifacts
+            .get(artifact.id())
+            .ok_or_else(|| anyhow!("artifact not found: {}", artifact.id()))?;
         Ok(bytes.clone())
     }
 

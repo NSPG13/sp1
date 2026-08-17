@@ -19,6 +19,13 @@ use crate::{
     SP1ProverComponents,
 };
 
+fn controller_failure_status(error: &TaskError) -> TaskStatus {
+    match error {
+        TaskError::Retryable(_) => TaskStatus::FailedRetryable,
+        TaskError::Fatal(_) | TaskError::Execution(_) => TaskStatus::FailedFatal,
+    }
+}
+
 pub struct SP1LocalNodeBuilder<C: SP1ProverComponents> {
     pub machine: Machine<SP1Field, RiscvAir<SP1Field>>,
     pub worker_builder: SP1WorkerBuilder<C, InMemoryArtifactClient, LocalWorkerClient>,
@@ -121,23 +128,35 @@ impl<C: SP1ProverComponents> SP1LocalNodeBuilder<C> {
             async move {
                 while let Some((task_id, request)) = controller_rx.recv().await {
                     let span = tracing::debug_span!("Controller", proof_id = %request.context.proof_id, task_id = %task_id);
-                    // Run the controller task
-                    if let Err(e) = worker.controller().run(request.clone()).instrument(span).await
-                    {
-                        tracing::error!("Controller: task failed: {e:?}");
-                    }
-
-                    // Complete the task
-                    if let Err(e) = worker
-                        .worker_client()
-                        .complete_task(
-                            request.context.proof_id,
-                            task_id,
-                            TaskMetadata { gpu_ms: None },
-                        )
-                        .await
-                    {
-                        tracing::error!("Controller: marking task as complete failed: {e:?}");
+                    let result = worker.controller().run(request.clone()).instrument(span).await;
+                    let status_result = match result {
+                        Ok(_) => {
+                            worker
+                                .worker_client()
+                                .complete_task(
+                                    request.context.proof_id.clone(),
+                                    task_id.clone(),
+                                    TaskMetadata { gpu_ms: None },
+                                )
+                                .await
+                        }
+                        Err(error) => {
+                            let status = controller_failure_status(&error);
+                            tracing::error!("Controller: task failed: {error:?}");
+                            eprintln!(
+                                "SP1 local controller failed: proof={} task={} status={status:?} error={error}",
+                                request.context.proof_id, task_id
+                            );
+                            worker
+                                .worker_client()
+                                .update_task_status(task_id.clone(), status)
+                                .await
+                        }
+                    };
+                    if let Err(error) = status_result {
+                        tracing::error!(
+                            "Controller: recording terminal task status failed: {error:?}"
+                        );
                     }
 
                     // Remove all the inputs from the task
@@ -569,6 +588,19 @@ impl<C: SP1ProverComponents> SP1LocalNodeBuilder<C> {
         let inner =
             Arc::new(SP1NodeInner { artifact_client, worker_client, core, _tasks: join_set });
         Ok(SP1LocalNode { inner })
+    }
+}
+
+#[cfg(test)]
+mod controller_status_tests {
+    use super::*;
+
+    #[test]
+    fn controller_errors_never_map_to_success() {
+        let retryable = TaskError::Retryable(anyhow::anyhow!("retry"));
+        let fatal = TaskError::Fatal(anyhow::anyhow!("fatal"));
+        assert_eq!(controller_failure_status(&retryable), TaskStatus::FailedRetryable);
+        assert_eq!(controller_failure_status(&fatal), TaskStatus::FailedFatal);
     }
 }
 
