@@ -431,6 +431,7 @@ impl ArtifactClient for InMemoryArtifactClient {
     ) -> Result<()> {
         let mut artifacts = self.artifacts.write().await;
         artifacts.insert(artifact.id().to_string(), data.clone());
+        eprintln!("SP1_ARTIFACT upload id={} bytes={}", artifact.id(), data.len());
         tracing::debug!(
             artifact_id = artifact.id(),
             artifact_bytes = data.len(),
@@ -472,6 +473,7 @@ impl ArtifactClient for InMemoryArtifactClient {
 
     async fn delete(&self, artifact: &impl ArtifactId, _artifact_type: ArtifactType) -> Result<()> {
         let removed = self.artifacts.write().await.remove(artifact.id());
+        eprintln!("SP1_ARTIFACT delete id={} existed={}", artifact.id(), removed.is_some());
         tracing::debug!(
             artifact_id = artifact.id(),
             artifact_existed = removed.is_some(),
@@ -493,6 +495,11 @@ impl ArtifactClient for InMemoryArtifactClient {
             let mut artifact_map = self.artifacts.write().await;
             for artifact in artifacts {
                 let removed = artifact_map.remove(artifact.id());
+                eprintln!(
+                    "SP1_ARTIFACT batch_delete id={} existed={}",
+                    artifact.id(),
+                    removed.is_some()
+                );
                 tracing::debug!(
                     artifact_id = artifact.id(),
                     artifact_existed = removed.is_some(),
