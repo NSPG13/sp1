@@ -431,6 +431,11 @@ impl ArtifactClient for InMemoryArtifactClient {
     ) -> Result<()> {
         let mut artifacts = self.artifacts.write().await;
         artifacts.insert(artifact.id().to_string(), data.clone());
+        tracing::debug!(
+            artifact_id = artifact.id(),
+            artifact_bytes = data.len(),
+            "artifact upload"
+        );
         Ok(())
     }
 
@@ -440,7 +445,19 @@ impl ArtifactClient for InMemoryArtifactClient {
         _artifact_type: ArtifactType,
     ) -> Result<Vec<u8>> {
         let artifacts = self.artifacts.read().await;
-        let bytes = artifacts.get(artifact.id()).ok_or_else(|| anyhow!("artifact not found"))?;
+        let bytes = artifacts.get(artifact.id()).ok_or_else(|| {
+            tracing::error!(
+                artifact_id = artifact.id(),
+                live_artifact_count = artifacts.len(),
+                "artifact download missed"
+            );
+            anyhow!("artifact not found: {}", artifact.id())
+        })?;
+        tracing::debug!(
+            artifact_id = artifact.id(),
+            artifact_bytes = bytes.len(),
+            "artifact download"
+        );
         Ok(bytes.clone())
     }
 
@@ -454,7 +471,12 @@ impl ArtifactClient for InMemoryArtifactClient {
     }
 
     async fn delete(&self, artifact: &impl ArtifactId, _artifact_type: ArtifactType) -> Result<()> {
-        self.artifacts.write().await.remove(artifact.id());
+        let removed = self.artifacts.write().await.remove(artifact.id());
+        tracing::debug!(
+            artifact_id = artifact.id(),
+            artifact_existed = removed.is_some(),
+            "artifact delete"
+        );
         self.index.untrack(artifact.id());
         Ok(())
     }
@@ -470,7 +492,12 @@ impl ArtifactClient for InMemoryArtifactClient {
         {
             let mut artifact_map = self.artifacts.write().await;
             for artifact in artifacts {
-                artifact_map.remove(artifact.id());
+                let removed = artifact_map.remove(artifact.id());
+                tracing::debug!(
+                    artifact_id = artifact.id(),
+                    artifact_existed = removed.is_some(),
+                    "artifact batch delete"
+                );
             }
         }
         for artifact in artifacts {
