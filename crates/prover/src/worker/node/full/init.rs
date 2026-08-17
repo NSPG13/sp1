@@ -605,6 +605,9 @@ impl TaskOutput {
             }
             Ok(Err(TaskError::Retryable(e))) => {
                 tracing::error!("task failed with retryable error: {:?}", e);
+                eprintln!(
+                    "SP1 local task failed retryably: type={task_type:?} task={task_id} error={e:#}"
+                );
                 let task_output = TaskOutput {
                     proof_id,
                     task_id,
@@ -617,6 +620,9 @@ impl TaskOutput {
             }
             Ok(Err(TaskError::Fatal(e))) => {
                 tracing::error!("task failed with fatal error: {:?}", e);
+                eprintln!(
+                    "SP1 local task failed fatally: type={task_type:?} task={task_id} error={e:#}"
+                );
                 let task_output = TaskOutput {
                     proof_id,
                     task_id,
@@ -629,6 +635,9 @@ impl TaskOutput {
             }
             Ok(Err(TaskError::Execution(e))) => {
                 tracing::error!("task failed with fatal error: {:?}", e);
+                eprintln!(
+                    "SP1 local task execution failed: type={task_type:?} task={task_id} error={e:#}"
+                );
                 let task_output = TaskOutput {
                     proof_id,
                     task_id,
@@ -641,6 +650,7 @@ impl TaskOutput {
             }
             Err(e) => {
                 tracing::error!("task panicked: {:?}", e);
+                eprintln!("SP1 local task panicked: type={task_type:?} task={task_id} error={e}");
             }
         }
     }

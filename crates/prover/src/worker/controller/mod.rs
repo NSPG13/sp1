@@ -417,11 +417,21 @@ where
 
                     let shrinkwrap_task_id =
                         worker_client.submit_task(TaskType::ShrinkWrap, shrinkwrap_task).await?;
-                    subscriber.wait_task(shrinkwrap_task_id).await?;
+                    let status = subscriber.wait_task(shrinkwrap_task_id).await?;
+                    if status != TaskStatus::Succeeded {
+                        return Err(TaskError::Fatal(anyhow::anyhow!(
+                            "ShrinkWrap task failed with status {status:?}"
+                        )));
+                    }
 
                     let groth16_task_id =
                         worker_client.submit_task(TaskType::Groth16Wrap, groth16_task).await?;
-                    subscriber.wait_task(groth16_task_id).await?;
+                    let status = subscriber.wait_task(groth16_task_id).await?;
+                    if status != TaskStatus::Succeeded {
+                        return Err(TaskError::Fatal(anyhow::anyhow!(
+                            "Groth16Wrap task failed with status {status:?}"
+                        )));
+                    }
                     Ok(())
                 });
             }
@@ -448,11 +458,21 @@ where
 
                     let shrinkwrap_task_id =
                         worker_client.submit_task(TaskType::ShrinkWrap, shrinkwrap_task).await?;
-                    subscriber.wait_task(shrinkwrap_task_id).await?;
+                    let status = subscriber.wait_task(shrinkwrap_task_id).await?;
+                    if status != TaskStatus::Succeeded {
+                        return Err(TaskError::Fatal(anyhow::anyhow!(
+                            "ShrinkWrap task failed with status {status:?}"
+                        )));
+                    }
 
                     let plonk_task_id =
                         worker_client.submit_task(TaskType::PlonkWrap, plonk_task).await?;
-                    subscriber.wait_task(plonk_task_id).await?;
+                    let status = subscriber.wait_task(plonk_task_id).await?;
+                    if status != TaskStatus::Succeeded {
+                        return Err(TaskError::Fatal(anyhow::anyhow!(
+                            "PlonkWrap task failed with status {status:?}"
+                        )));
+                    }
                     Ok(())
                 });
             }
