@@ -119,16 +119,19 @@ pub fn build_groth16_bn254(data_dir: &str) {
     build(ProofSystem::Groth16, data_dir).expect("failed to build with docker");
 }
 
-#[allow(clippy::too_many_arguments)]
+struct VerifyPublicInputs<'a> {
+    vkey_hash: &'a str,
+    committed_values_digest: &'a str,
+    exit_code: &'a str,
+    vk_root: &'a str,
+    proof_nonce: &'a str,
+}
+
 fn verify(
     system: ProofSystem,
     data_dir: &str,
     proof: &str,
-    vkey_hash: &str,
-    committed_values_digest: &str,
-    exit_code: &str,
-    vk_root: &str,
-    proof_nonce: &str,
+    public_inputs: VerifyPublicInputs<'_>,
 ) -> Result<()> {
     let mut proof_file = tempfile::NamedTempFile::new()?;
     proof_file.write_all(proof.as_bytes())?;
@@ -149,15 +152,15 @@ fn verify(
             "--proof-path",
             "/proof",
             "--vkey-hash",
-            vkey_hash,
+            public_inputs.vkey_hash,
             "--committed-values-digest",
-            committed_values_digest,
+            public_inputs.committed_values_digest,
             "--exit-code",
-            exit_code,
+            public_inputs.exit_code,
             "--proof-nonce",
-            proof_nonce,
+            public_inputs.proof_nonce,
             "--vk-root",
-            vk_root,
+            public_inputs.vk_root,
             "--output-path",
             "/output",
         ],
@@ -184,11 +187,7 @@ pub fn verify_plonk_bn254(
         ProofSystem::Plonk,
         data_dir,
         proof,
-        vkey_hash,
-        committed_values_digest,
-        exit_code,
-        proof_nonce,
-        vk_root,
+        VerifyPublicInputs { vkey_hash, committed_values_digest, exit_code, vk_root, proof_nonce },
     )
 }
 
@@ -205,11 +204,7 @@ pub fn verify_groth16_bn254(
         ProofSystem::Groth16,
         data_dir,
         proof,
-        vkey_hash,
-        committed_values_digest,
-        exit_code,
-        vk_root,
-        proof_nonce,
+        VerifyPublicInputs { vkey_hash, committed_values_digest, exit_code, vk_root, proof_nonce },
     )
 }
 
